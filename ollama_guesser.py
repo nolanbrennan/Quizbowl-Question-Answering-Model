@@ -98,12 +98,12 @@ class CalibratedRAG(dspy.Module):
             guess: str = dspy.InputField()
             confidence: float = dspy.OutputField()
 
-        self.topk = None
+        self._topk = None
         self.retrievers = {}
         self.lat_generator = dspy.Predict(LexicalAnswerType)
         self.qtype_generator = dspy.Predict(QuestionTypeSig)
         self.query_generator = dspy.Predict(QueryGenerator)
-        self.guess_generator = dspy.ChainOfThought("question,lat,qtype,context->answer")
+        self.guess_generator = dspy.ChainOfThought("question,lat,qtype,context->guess")
         self.confidence_generator = dspy.Predict(PredictionGenerator)
 
     def forward(self, question, **kwargs):
@@ -122,11 +122,12 @@ class CalibratedRAG(dspy.Module):
             for rank, result in enumerate(results):
                 passage = result.get("text", result.get("question", ""))
                 context_snippet = passage
-                context += f"Rank {rank+1} Retriever: {retriever_name} Guess: {result.get('guess','')} Score: {result.get('score',0):.2f}\nContext: {context_snippet}\n\n"
+                context += f"{result.get('guess','')}:{retriever_name}:{context_snippet}\n"
             
         guess = self.guess_generator(question=question, lat=lat, qtype=qtype, context=context)
         confidence = self.confidence_generator(question=question, lat=lat, qtype=qtype, query=query, context=context, guess=guess)
-        return FullResult(guess=guess.answer, context=context, confidence=confidence.confidence)
+
+        return FullResult(guess=guess.guess, context=context, confidence=confidence.confidence)
 
     def init_retriever(self, name:str, model_filename:str, topk:int=1):
         """
@@ -143,7 +144,7 @@ class CalibratedRAG(dspy.Module):
         retriever = TfidfGuesser(model_filename)
         self.retrievers[name] = retriever 
         self.retrievers[name].load()
-        if self.topk is None:    
+        if self._topk is None:    
             self._topk = topk    
         else:                    
             assert self._topk == topk 
