@@ -229,6 +229,8 @@ class TfidfGuesser(Guesser):
 
         self.tfidf_vectorizer.train_bpe(self.questions, num_merges=200, min_frequency=2)
         self.tfidf = self.tfidf_vectorizer.fit_transform(self.questions)
+        if hasattr(self.tfidf, "tocsr"):
+            self.tfidf = self.tfidf.tocsr()
 
         logging.info("Creating tf-idf dataframe with %i" % len(self.questions))
         
@@ -306,13 +308,18 @@ class TfidfGuesser(Guesser):
 
            bpe_block = [" ".join(str(tok) for tok in self.tfidf_vectorizer.tokenize(q)) for q in block]
            block_tfidf = self.tfidf_vectorizer.transform(bpe_block)
+           if hasattr(block_tfidf, "tocsr"):
+               block_tfidf = block_tfidf.tocsr()
 
-           cosine_similarities = cosine_similarity(block_tfidf, self.tfidf)
+           from sklearn.metrics.pairwise import linear_kernel
+           cosine_similarities = linear_kernel(block_tfidf, self.tfidf, dense_output=False)
           
           # Process each question in the block
            for question_idx in range(len(block)):
-              cos = cosine_similarities[question_idx]
-              
+              if hasattr(cosine_similarities, "getrow"):
+                  cos = cosine_similarities.getrow(question_idx).toarray().ravel()
+              else:
+                  cos = cosine_similarities[question_idx]
               # Get the indices of the top answers
               # Using argpartition is more efficient than full sort for getting top-k
               if max_n_guesses < len(cos):

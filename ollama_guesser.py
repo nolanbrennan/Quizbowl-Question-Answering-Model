@@ -63,12 +63,36 @@ def validate_answer(example: dspy.Example, pred, trace=None):
 class CalibratedRAG(dspy.Module):
     def __init__(self):
 
+        class LexicalAnswerType(dspy.Signature):
+            question: str = dspy.InputField()
+            lat: str = dspy.OutputField(desc="Lexical Answer Type")
+
+        class QuestionTypeSig(dspy.Signature):
+            question: str = dspy.InputField()
+            qtype: str = dspy.OutputField(desc="""
+                Quizbowl Question Type. Choose one:
+                - Biography/Person
+                - Plot Summary/Work
+                - Character Identification
+                - Historical Event
+                - Scientific Concept
+                - Artwork/Musical Work Description
+                - Philosophical Idea/Doctrine
+                - Geography/Location
+                - Mythology/Religion/Culture
+                - Miscellaneous Entity
+            """)
+
         class QueryGenerator(dspy.Signature):
             question: str = dspy.InputField()
+            lat: str = dspy.InputField()
+            qtype: str = dspy.InputField()
             query: str = dspy.OutputField()
 
         class PredictionGenerator(dspy.Signature):
             question: str = dspy.InputField()
+            lat: str = dspy.InputField()
+            qtype: str = dspy.InputField()
             query: str = dspy.InputField()
             context: str = dspy.InputField()
             guess: str = dspy.InputField()
@@ -76,8 +100,10 @@ class CalibratedRAG(dspy.Module):
 
         self.topk = None
         self.retrievers = {}
+        self.lat_generator = dspy.Predict(LexicalAnswerType)
+        self.qtype_generator = dspy.Predict(QuestionTypeSig)
         self.query_generator = dspy.Predict(QueryGenerator)
-        self.guess_generator = dspy.ChainOfThought("question,context->answer")
+        self.guess_generator = dspy.ChainOfThought("question,lat,qtype,context->answer")
         self.confidence_generator = dspy.Predict(PredictionGenerator)
 
     def forward(self, question, **kwargs):
@@ -86,15 +112,20 @@ class CalibratedRAG(dspy.Module):
             confidence: float = dspy.OutputField()
             context: str = dspy.OutputField()
         
-        query = self.query_generator(question=question).query
+        lat = self.lat_generator(question=question).lat
+        qtype = self.qtype_generator(question=question).qtype
+
+        query = self.query_generator(question=question, lat=lat, qtype=qtype).query
         context = ""
-        for retriever in self.retrievers:
-            results = self.retrievers[retriever](query, self._topk)
-            for result in results:
-                context += "%s: %s: %s\n" % (result["guess"], retriever, result["question"])
+        for retriever_name, retriever in self.retrievers.items():
+            results = retriever(query, self._topk)
+            for rank, result in enumerate(results):
+                passage = result.get("text", result.get("question", ""))
+                context_snippet = passage
+                context += f"Rank {rank+1} Retriever: {retriever_name} Guess: {result.get('guess','')} Score: {result.get('score',0):.2f}\nContext: {context_snippet}\n\n"
             
-        guess = self.guess_generator(question=question, context=context)
-        confidence = self.confidence_generator(question=question, query=query, context=context, guess=guess)
+        guess = self.guess_generator(question=question, lat=lat, qtype=qtype, context=context)
+        confidence = self.confidence_generator(question=question, lat=lat, qtype=qtype, query=query, context=context, guess=guess)
         return FullResult(guess=guess.answer, context=context, confidence=confidence.confidence)
 
     def init_retriever(self, name:str, model_filename:str, topk:int=1):
@@ -127,6 +158,9 @@ class OllamaDspy(Guesser):
 
         if params.ollama_guesser_opt_algorithm == 'MIPROv2':
             from dspy.teleprompt import MIPROv2
+            from dspy import LM, configure
+            self._lm = LM('ollama_chat/gemma3:4b', api_base='http://localhost:11434')
+            configure(lm=self._lm)
             self._teleprompter = MIPROv2(
                 metric=validate_answer,
                 num_threads=params.ollama_guesser_threads,
