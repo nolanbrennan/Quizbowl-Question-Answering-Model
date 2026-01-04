@@ -1,9 +1,3 @@
-# Jordan Boyd-Graber
-# 2023
-#
-# Feature extractors to improve classification to determine if an answer is
-# correct.
-
 from collections import Counter
 from math import log
 from numpy import mean
