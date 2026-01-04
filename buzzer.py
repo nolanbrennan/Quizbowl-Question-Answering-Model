@@ -1,8 +1,3 @@
-# Author: Jordan Boyd-Graber
-# 2025
-
-# File to take guesses and decide if they're correct
-
 import argparse
 import logging
 import pickle
