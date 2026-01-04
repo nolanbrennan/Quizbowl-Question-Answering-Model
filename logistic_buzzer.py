@@ -1,10 +1,4 @@
-# Jordan Boyd-Graber
-# 2023
-#
-# Buzzer using Logistic Regression
-
 import pickle
-
 import logging
 
 from sklearn.linear_model import LogisticRegression
