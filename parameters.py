@@ -1,9 +1,3 @@
-# Jordan Boyd_Graber
-# 2023
-#
-# File to define default command line parameters and to instantiate objects
-# based on those parameters.  Included in most files in this project.
-
 import logging
 import argparse
 import json
