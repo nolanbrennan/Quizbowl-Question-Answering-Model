@@ -1,7 +1,3 @@
-# Jordan Boyd-Graber
-# 2023
-#
-# Run an evaluation on a QA system and print results
 import random
 import string
 import logging
