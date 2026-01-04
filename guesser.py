@@ -1,8 +1,3 @@
-# Jordan Boyd-Graber
-# 2023
-
-# Base class for our guessers
-
 import os
 import re
 import json
